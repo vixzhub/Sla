@@ -149,7 +149,7 @@ end
 
 -- GUI
 local gui = Instance.new("ScreenGui", PlayerGui)
-gui.Name = "GeekAdvancedUI"
+gui.Name = "VixzDivo Hub"
 gui.ResetOnSpawn = false
 
 local frame = Instance.new("Frame", gui)
@@ -162,7 +162,7 @@ Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 10)
 
 local title = Instance.new("TextLabel", frame)
 title.Size = UDim2.new(1, 0, 0, 30)
-title.Text = "📦 GeekHub Menu"
+title.Text = "📦 @VixzDivo Hub"
 title.Font = Enum.Font.GothamBold
 title.TextColor3 = Color3.new(1,1,1)
 title.BackgroundTransparency = 1
