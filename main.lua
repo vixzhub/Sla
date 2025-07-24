@@ -14,6 +14,8 @@ local espEnabled = true
 local wallBypass = false
 local speedEnabled = false
 local espLoop = true
+local currentSpeed = 50
+local currentTab = "Main"
 
 -- TELEPORT UP/DOWN
 local function teleportUpDown()
@@ -70,7 +72,25 @@ wallClimbConnection = RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ESP
+-- Função para obter a raridade (exemplo)
+local function getRarity(plr)
+    -- Exemplo: usando o userId para gerar um número pseudo-aleatório
+    local seed = plr.UserId
+    math.randomseed(seed)
+    local rarityLevel = math.random(1, 5)  -- 1 a 5
+
+    local rarities = {
+        {name = "Comum", color = Color3.new(1,1,1)},
+        {name = "Rare", color = Color3.new(0,1,0)},
+        {name = "Épico", color = Color3.new(0,0.5,1)},
+        {name = "Lendário", color = Color3.new(0.5,0,1)},
+        {name = "Mítico", color = Color3.new(1,0.8,0)}
+    }
+
+    return rarities[rarityLevel]
+end
+
+-- ESP COM RARIDADE
 local function addESP(plr)
     if not espEnabled or not plr.Character then return end
     local head = plr.Character:FindFirstChild("Head")
@@ -83,13 +103,17 @@ local function addESP(plr)
     gui.StudsOffset = Vector3.new(0, 2.5, 0)
     gui.AlwaysOnTop = true
 
+    -- Obter raridade e cor
+    local rarity = getRarity(plr)
+    local rarityColor = rarity.color
+
     local label = Instance.new("TextLabel", gui)
     label.Size = UDim2.new(1, 0, 1, 0)
     label.BackgroundTransparency = 1
-    label.Text = plr.Name
+    label.Text = plr.Name .. " (" .. rarity.name .. ")"
     label.TextScaled = true
     label.Font = Enum.Font.GothamBold
-    label.TextColor3 = Color3.new(1, 0, 0)
+    label.TextColor3 = rarityColor
     label.TextStrokeTransparency = 0.5
 
     for _, partName in pairs({"Head", "HumanoidRootPart"}) do
@@ -97,7 +121,7 @@ local function addESP(plr)
         if part and not part:FindFirstChild("Highlight") then
             local hl = Instance.new("Highlight", part)
             hl.Name = "Highlight"
-            hl.FillColor = Color3.fromRGB(255, 0, 0)
+            hl.FillColor = rarityColor
             hl.OutlineColor = Color3.fromRGB(255, 255, 255)
             hl.FillTransparency = 0.5
             hl.OutlineTransparency = 0
@@ -135,7 +159,7 @@ task.spawn(function()
     end
 end)
 
--- SPEED HACK CORRIGIDO
+-- SPEED HACK COM CONTROLE DE VELOCIDADE
 local speedConnection
 local function toggleSpeed()
     speedEnabled = not speedEnabled
@@ -148,8 +172,7 @@ local function toggleSpeed()
             
             local humanoid = char:FindFirstChildOfClass("Humanoid")
             if humanoid then
-                -- Definir a velocidade para 50
-                humanoid.WalkSpeed = 50
+                humanoid.WalkSpeed = currentSpeed
             end
         end)
     else
@@ -178,8 +201,8 @@ gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
 -- Frame principal
 local mainFrame = Instance.new("Frame", gui)
-mainFrame.Size = UDim2.new(0, 350, 0, 300)
-mainFrame.Position = UDim2.new(0.5, -175, 0.5, -150)
+mainFrame.Size = UDim2.new(0, 380, 0, 380)
+mainFrame.Position = UDim2.new(0.5, -190, 0.5, -190)
 mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
 mainFrame.BackgroundTransparency = 0.2
 mainFrame.BorderSizePixel = 0
@@ -241,13 +264,94 @@ minimizeBtn.AutoButtonColor = false
 local minimizeCorner = Instance.new("UICorner", minimizeBtn)
 minimizeCorner.CornerRadius = UDim.new(0, 8)
 
--- Área de botões principais
-local buttonsFrame = Instance.new("Frame", mainFrame)
-buttonsFrame.Size = UDim2.new(1, -20, 1, -60)
-buttonsFrame.Position = UDim2.new(0, 10, 0, 50)
+-- Barra de abas
+local tabBar = Instance.new("Frame", mainFrame)
+tabBar.Size = UDim2.new(1, 0, 0, 40)
+tabBar.Position = UDim2.new(0, 0, 0, 40)
+tabBar.BackgroundTransparency = 1
+
+local tabLayout = Instance.new("UIListLayout", tabBar)
+tabLayout.FillDirection = Enum.FillDirection.Horizontal
+tabLayout.Padding = UDim.new(0, 5)
+tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+-- Função para criar abas
+local function createTab(name)
+    local tab = Instance.new("TextButton", tabBar)
+    tab.Size = UDim2.new(0.3, 0, 0.8, 0)
+    tab.Text = name
+    tab.Font = Enum.Font.GothamBold
+    tab.TextSize = 14
+    tab.TextColor3 = Color3.new(1, 1, 1)
+    tab.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
+    tab.BackgroundTransparency = 0.5
+    tab.AutoButtonColor = false
+    
+    local tabCorner = Instance.new("UICorner", tab)
+    tabCorner.CornerRadius = UDim.new(0, 8)
+    
+    tab.MouseButton1Click:Connect(function()
+        currentTab = name
+        for _, tabName in ipairs({"Sobre", "Main", "Visual"}) do
+            local frame = mainFrame:FindFirstChild(tabName.."Frame")
+            if frame then
+                frame.Visible = (tabName == name)
+            end
+        end
+    end)
+    
+    return tab
+end
+
+-- Criar abas
+createTab("Sobre")
+createTab("Main")
+createTab("Visual")
+
+-- Frames de conteúdo para cada aba
+local function createContentFrame(name)
+    local frame = Instance.new("Frame", mainFrame)
+    frame.Name = name.."Frame"
+    frame.Size = UDim2.new(1, -20, 1, -130)
+    frame.Position = UDim2.new(0, 10, 0, 90)
+    frame.BackgroundTransparency = 1
+    frame.Visible = (name == currentTab)
+    return frame
+end
+
+local sobreFrame = createContentFrame("Sobre")
+local mainFrameContent = createContentFrame("Main")
+local visualFrame = createContentFrame("Visual")
+
+-- Conteúdo da aba Sobre
+local sobreText = [[
+⚡ Vixz Hub ⚡
+Versão 1.0
+
+Comandos:
+- Teleport: ▲/▼
+- Wall Climb: 🧱
+- Speed: ⚡
+- ESP: 👁️
+
+Desenvolvido por Vixz
+]]
+
+local sobreLabel = Instance.new("TextLabel", sobreFrame)
+sobreLabel.Size = UDim2.new(1, 0, 1, 0)
+sobreLabel.Text = sobreText
+sobreLabel.Font = Enum.Font.Gotham
+sobreLabel.TextSize = 14
+sobreLabel.TextColor3 = Color3.new(1, 1, 1)
+sobreLabel.BackgroundTransparency = 1
+sobreLabel.TextXAlignment = Enum.TextXAlignment.Left
+sobreLabel.TextYAlignment = Enum.TextYAlignment.Top
+
+-- Conteúdo da aba Main
+local buttonsFrame = Instance.new("Frame", mainFrameContent)
+buttonsFrame.Size = UDim2.new(1, 0, 1, 0)
 buttonsFrame.BackgroundTransparency = 1
 
--- Lista de botões
 local gridLayout = Instance.new("UIGridLayout", buttonsFrame)
 gridLayout.CellPadding = UDim2.new(0, 10, 0, 10)
 gridLayout.CellSize = UDim2.new(0.5, -5, 0, 50)
@@ -306,23 +410,156 @@ local function createButton(text, callback, color)
     return btn
 end
 
--- Criar botões
+-- Criar botões na aba Main
 local teleportBtn = createButton("▲/▼ TELEPORT", teleportUpDown, Color3.fromRGB(0, 120, 215))
 teleportBtn.Parent = buttonsFrame
-
-local espBtn = createButton("👁️ ESP", function() 
-    espEnabled = not espEnabled
-    if not espEnabled then clearESP() end
-end, Color3.fromRGB(215, 50, 50))
-espBtn.Parent = buttonsFrame
 
 local wallBtn = createButton("🧱 WALL CLIMB", function() 
     wallBypass = not wallBypass
 end, Color3.fromRGB(50, 180, 80))
 wallBtn.Parent = buttonsFrame
 
-local speedBtn = createButton("⚡ SPEED HACK", toggleSpeed, Color3.fromRGB(215, 180, 0))
+-- Botão de velocidade com controle
+local speedBtn = createButton("⚡ SPEED: "..currentSpeed, toggleSpeed, Color3.fromRGB(215, 180, 0))
 speedBtn.Parent = buttonsFrame
+
+-- Controles de velocidade
+local speedControls = Instance.new("Frame", buttonsFrame)
+speedControls.Size = UDim2.new(1, 0, 0, 30)
+speedControls.BackgroundTransparency = 1
+
+local decreaseBtn = Instance.new("TextButton", speedControls)
+decreaseBtn.Size = UDim2.new(0.25, 0, 1, 0)
+decreaseBtn.Text = "-"
+decreaseBtn.Font = Enum.Font.GothamBold
+decreaseBtn.TextSize = 18
+decreaseBtn.TextColor3 = Color3.new(1, 1, 1)
+decreaseBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 90)
+decreaseBtn.AutoButtonColor = false
+
+local decreaseCorner = Instance.new("UICorner", decreaseBtn)
+decreaseCorner.CornerRadius = UDim.new(0, 6)
+
+local speedDisplay = Instance.new("TextLabel", speedControls)
+speedDisplay.Size = UDim2.new(0.5, 0, 1, 0)
+speedDisplay.Position = UDim2.new(0.25, 0, 0, 0)
+speedDisplay.Text = "Velocidade: "..currentSpeed
+speedDisplay.Font = Enum.Font.Gotham
+speedDisplay.TextSize = 14
+speedDisplay.TextColor3 = Color3.new(1, 1, 1)
+speedDisplay.BackgroundTransparency = 1
+
+local increaseBtn = Instance.new("TextButton", speedControls)
+increaseBtn.Size = UDim2.new(0.25, 0, 1, 0)
+increaseBtn.Position = UDim2.new(0.75, 0, 0, 0)
+increaseBtn.Text = "+"
+increaseBtn.Font = Enum.Font.GothamBold
+increaseBtn.TextSize = 18
+increaseBtn.TextColor3 = Color3.new(1, 1, 1)
+increaseBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 90)
+increaseBtn.AutoButtonColor = false
+
+local increaseCorner = Instance.new("UICorner", increaseBtn)
+increaseCorner.CornerRadius = UDim.new(0, 6)
+
+-- Funcionalidade dos controles de velocidade
+decreaseBtn.MouseButton1Click:Connect(function()
+    currentSpeed = math.max(16, currentSpeed - 5)
+    speedBtn.Text = "⚡ SPEED: "..currentSpeed
+    speedDisplay.Text = "Velocidade: "..currentSpeed
+    
+    if speedEnabled then
+        local char = player.Character
+        if char then
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                humanoid.WalkSpeed = currentSpeed
+            end
+        end
+    end
+end)
+
+increaseBtn.MouseButton1Click:Connect(function()
+    currentSpeed = currentSpeed + 5
+    speedBtn.Text = "⚡ SPEED: "..currentSpeed
+    speedDisplay.Text = "Velocidade: "..currentSpeed
+    
+    if speedEnabled then
+        local char = player.Character
+        if char then
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
+            if humanoid then
+                humanoid.WalkSpeed = currentSpeed
+            end
+        end
+    end
+end)
+
+-- Conteúdo da aba Visual
+local espBtn = createButton("👁️ ESP", function() 
+    espEnabled = not espEnabled
+    if not espEnabled then clearESP() end
+end, Color3.fromRGB(215, 50, 50))
+espBtn.Size = UDim2.new(0.8, 0, 0, 50)
+espBtn.Position = UDim2.new(0.1, 0, 0.1, 0)
+espBtn.Parent = visualFrame
+
+-- Legenda de cores do ESP
+local espLegend = Instance.new("Frame", visualFrame)
+espLegend.Size = UDim2.new(0.8, 0, 0.6, 0)
+espLegend.Position = UDim2.new(0.1, 0, 0.3, 0)
+espLegend.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+espLegend.BackgroundTransparency = 0.7
+
+local legendCorner = Instance.new("UICorner", espLegend)
+legendCorner.CornerRadius = UDim.new(0, 8)
+
+local legendTitle = Instance.new("TextLabel", espLegend)
+legendTitle.Size = UDim2.new(1, 0, 0.1, 0)
+legendTitle.Text = "Legenda de Raridade"
+legendTitle.Font = Enum.Font.GothamBold
+legendTitle.TextSize = 16
+legendTitle.TextColor3 = Color3.new(1, 1, 1)
+legendTitle.BackgroundTransparency = 1
+
+-- Lista de raridades
+local rarities = {
+    {name = "Comum", color = Color3.new(1,1,1)},
+    {name = "Rare", color = Color3.new(0,1,0)},
+    {name = "Épico", color = Color3.new(0,0.5,1)},
+    {name = "Lendário", color = Color3.new(0.5,0,1)},
+    {name = "Mítico", color = Color3.new(1,0.8,0)}
+}
+
+local listLayout = Instance.new("UIListLayout", espLegend)
+listLayout.Padding = UDim.new(0, 5)
+listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+listLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+listLayout.Padding = UDim.new(0, 10)
+
+for i, rarity in ipairs(rarities) do
+    local item = Instance.new("Frame", espLegend)
+    item.Size = UDim2.new(0.9, 0, 0.15, 0)
+    item.BackgroundTransparency = 1
+    
+    local colorBox = Instance.new("Frame", item)
+    colorBox.Size = UDim2.new(0, 20, 0.8, 0)
+    colorBox.Position = UDim2.new(0.05, 0, 0.1, 0)
+    colorBox.BackgroundColor3 = rarity.color
+    
+    local colorCorner = Instance.new("UICorner", colorBox)
+    colorCorner.CornerRadius = UDim.new(0, 4)
+    
+    local nameLabel = Instance.new("TextLabel", item)
+    nameLabel.Size = UDim2.new(0.7, 0, 1, 0)
+    nameLabel.Position = UDim2.new(0.3, 0, 0, 0)
+    nameLabel.Text = rarity.name
+    nameLabel.Font = Enum.Font.Gotham
+    nameLabel.TextSize = 14
+    nameLabel.TextColor3 = Color3.new(1, 1, 1)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+end
 
 -- Barra de status
 local statusBar = Instance.new("Frame", mainFrame)
