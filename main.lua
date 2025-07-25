@@ -17,6 +17,46 @@ local espLoop = true
 local currentSpeed = 50
 local currentTab = "Main"
 
+
+local function applySpeed()
+    local character = player.Character
+    if character then
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid.WalkSpeed = speedEnabled and currentSpeed or 16
+        end
+    end
+end
+
+player.CharacterAdded:Connect(function()
+    wait(1)
+    applySpeed()
+end)
+
+local screenGui = Instance.new("ScreenGui", PlayerGui)
+screenGui.Name = "SpeedControlGui"
+
+local speedBtn = Instance.new("TextButton")
+speedBtn.Text = "Speed: OFF"
+speedBtn.Size = UDim2.new(0, 100, 0, 30)
+speedBtn.Position = UDim2.new(0, 10, 0, 10)
+speedBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+speedBtn.TextColor3 = Color3.new(1, 1, 1)
+speedBtn.Parent = screenGui
+
+speedBtn.MouseButton1Click:Connect(function()
+    speedEnabled = not speedEnabled
+    speedBtn.Text = speedEnabled and "Speed: ON" or "Speed: OFF"
+    speedBtn.BackgroundColor3 = speedEnabled and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
+    applySpeed()
+end)
+
+RunService.RenderStepped:Connect(function()
+    if speedEnabled then
+        applySpeed()
+    end
+end)
+
 -- TELEPORT UP/DOWN
 local function teleportUpDown()
     if isMoving then return end
