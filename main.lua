@@ -3,6 +3,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local TeleportService = game:GetService("TeleportService")
 local player = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
 
@@ -10,14 +11,80 @@ local PlayerGui = player:WaitForChild("PlayerGui")
 local isUp = false
 local isMoving = false
 local platform = nil
-local espEnabled = true
+local playerESPEnabled = true
+local rarityESPEnabled = true
 local wallBypass = false
 local speedEnabled = false
 local espLoop = true
 local currentSpeed = 50
 local currentTab = "Main"
+local hopping = false
 
+-- Configurações de Raridades
+local raritiesConfig = {
+    Common = {enabled = true, color = Color3.new(1,1,1)},
+    Rare = {enabled = true, color = Color3.new(0,1,0)},
+    Epic = {enabled = true, color = Color3.new(0,0.5,1)},
+    Legendary = {enabled = true, color = Color3.new(0.5,0,1)},
+    Mythic = {enabled = true, color = Color3.new(1,0.8,0)}
+}
 
+-- Cache para ESPs
+local trackedPlayers = {}
+local trackedRarities = {}
+
+-- Função para criar botões estilizados
+local function createButton(text, callback, color)
+    local btn = Instance.new("TextButton")
+    btn.Text = text
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 16
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.BackgroundColor3 = color
+    btn.AutoButtonColor = false
+    btn.ZIndex = 2
+    
+    local btnCorner = Instance.new("UICorner", btn)
+    btnCorner.CornerRadius = UDim.new(0, 8)
+    
+    local stroke = Instance.new("UIStroke", btn)
+    stroke.Color = Color3.fromRGB(200, 200, 255)
+    stroke.Thickness = 1
+    
+    -- Animação de hover
+    btn.MouseEnter:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.2), {
+            BackgroundTransparency = 0,
+            Size = UDim2.new(btn.Size.X.Scale + 0.02, 0, 0, btn.Size.Y.Offset + 2)
+        }):Play()
+    end)
+    
+    btn.MouseLeave:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.2), {
+            BackgroundTransparency = 0.2,
+            Size = UDim2.new(btn.Size.X.Scale - 0.02, 0, 0, btn.Size.Y.Offset - 2)
+        }):Play()
+    end)
+    
+    btn.MouseButton1Down:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.1), {
+            BackgroundTransparency = 0.4,
+            Size = UDim2.new(btn.Size.X.Scale - 0.02, 0, 0, btn.Size.Y.Offset - 2)
+        }):Play()
+    end)
+    
+    btn.MouseButton1Up:Connect(function()
+        TweenService:Create(btn, TweenInfo.new(0.1), {
+            BackgroundTransparency = 0.2,
+            Size = UDim2.new(btn.Size.X.Scale, 0, 0, btn.Size.Y.Offset)
+        }):Play()
+        callback()
+    end)
+    
+    return btn
+end
+
+-- Função para aplicar velocidade
 local function applySpeed()
     local character = player.Character
     if character then
@@ -29,32 +96,8 @@ local function applySpeed()
 end
 
 player.CharacterAdded:Connect(function()
-    wait(1)
+    task.wait(1)
     applySpeed()
-end)
-
-local screenGui = Instance.new("ScreenGui", PlayerGui)
-screenGui.Name = "SpeedControlGui"
-
-local speedBtn = Instance.new("TextButton")
-speedBtn.Text = "Speed: OFF"
-speedBtn.Size = UDim2.new(0, 100, 0, 30)
-speedBtn.Position = UDim2.new(0, 10, 0, 10)
-speedBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
-speedBtn.TextColor3 = Color3.new(1, 1, 1)
-speedBtn.Parent = screenGui
-
-speedBtn.MouseButton1Click:Connect(function()
-    speedEnabled = not speedEnabled
-    speedBtn.Text = speedEnabled and "Speed: ON" or "Speed: OFF"
-    speedBtn.BackgroundColor3 = speedEnabled and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
-    applySpeed()
-end)
-
-RunService.RenderStepped:Connect(function()
-    if speedEnabled then
-        applySpeed()
-    end
 end)
 
 -- TELEPORT UP/DOWN
@@ -112,92 +155,125 @@ wallClimbConnection = RunService.RenderStepped:Connect(function()
     end
 end)
 
--- Função para obter a raridade (exemplo)
-local function getRarity(plr)
-    -- Exemplo: usando o userId para gerar um número pseudo-aleatório
-    local seed = plr.UserId
-    math.randomseed(seed)
-    local rarityLevel = math.random(1, 5)  -- 1 a 5
-
-    local rarities = {
-        {name = "Comum", color = Color3.new(1,1,1)},
-        {name = "Rare", color = Color3.new(0,1,0)},
-        {name = "Épico", color = Color3.new(0,0.5,1)},
-        {name = "Lendário", color = Color3.new(0.5,0,1)},
-        {name = "Mítico", color = Color3.new(1,0.8,0)}
-    }
-
-    return rarities[rarityLevel]
-end
-
--- ESP COM RARIDADE
-local function addESP(plr)
-    if not espEnabled or not plr.Character then return end
-    local head = plr.Character:FindFirstChild("Head")
-    if not head or head:FindFirstChild("ESPTag") then return end
-
-    local gui = Instance.new("BillboardGui", head)
-    gui.Name = "ESPTag"
-    gui.Adornee = head
-    gui.Size = UDim2.new(0, 100, 0, 20)
-    gui.StudsOffset = Vector3.new(0, 2.5, 0)
-    gui.AlwaysOnTop = true
-
-    -- Obter raridade e cor
-    local rarity = getRarity(plr)
-    local rarityColor = rarity.color
-
-    local label = Instance.new("TextLabel", gui)
-    label.Size = UDim2.new(1, 0, 1, 0)
-    label.BackgroundTransparency = 1
-    label.Text = plr.Name .. " (" .. rarity.name .. ")"
-    label.TextScaled = true
-    label.Font = Enum.Font.GothamBold
-    label.TextColor3 = rarityColor
-    label.TextStrokeTransparency = 0.5
-
-    for _, partName in pairs({"Head", "HumanoidRootPart"}) do
-        local part = plr.Character:FindFirstChild(partName)
-        if part and not part:FindFirstChild("Highlight") then
-            local hl = Instance.new("Highlight", part)
-            hl.Name = "Highlight"
-            hl.FillColor = rarityColor
-            hl.OutlineColor = Color3.fromRGB(255, 255, 255)
-            hl.FillTransparency = 0.5
-            hl.OutlineTransparency = 0
+-- Função otimizada para ESP de jogadores
+local function updatePlayerESP()
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= player and plr.Character then
+            local char = plr.Character
+            local humanoidRootPart = char:FindFirstChild("HumanoidRootPart")
+            local head = char:FindFirstChild("Head")
+            
+            if humanoidRootPart and head then
+                if not trackedPlayers[plr] then
+                    local highlight = Instance.new("Highlight")
+                    highlight.Name = "PlayerHighlight"
+                    highlight.FillColor = Color3.new(1, 0, 0)
+                    highlight.OutlineColor = Color3.new(1, 1, 1)
+                    highlight.FillTransparency = 0.7
+                    highlight.OutlineTransparency = 0
+                    highlight.Parent = char
+                    
+                    local billboard = Instance.new("BillboardGui")
+                    billboard.Name = "PlayerESPTag"
+                    billboard.Size = UDim2.new(0, 100, 0, 20)
+                    billboard.StudsOffset = Vector3.new(0, 2.5, 0)
+                    billboard.AlwaysOnTop = true
+                    billboard.Parent = head
+                    
+                    local label = Instance.new("TextLabel")
+                    label.Size = UDim2.new(1, 0, 1, 0)
+                    label.BackgroundTransparency = 1
+                    label.Text = plr.Name
+                    label.Font = Enum.Font.GothamBold
+                    label.TextColor3 = Color3.new(1, 1, 1)
+                    label.TextStrokeTransparency = 0.5
+                    label.Parent = billboard
+                    
+                    trackedPlayers[plr] = {
+                        highlight = highlight,
+                        billboard = billboard,
+                        label = label
+                    }
+                end
+                
+                if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                    local distance = (player.Character.HumanoidRootPart.Position - humanoidRootPart.Position).Magnitude
+                    trackedPlayers[plr].label.Text = plr.Name .. " (" .. math.floor(distance) .. "m)"
+                end
+            end
+        elseif trackedPlayers[plr] then
+            trackedPlayers[plr].highlight:Destroy()
+            trackedPlayers[plr].billboard:Destroy()
+            trackedPlayers[plr] = nil
         end
     end
 end
 
-local function clearESP()
-    for _, plr in pairs(Players:GetPlayers()) do
-        if plr.Character then
-            local head = plr.Character:FindFirstChild("Head")
-            if head and head:FindFirstChild("ESPTag") then
-                head.ESPTag:Destroy()
-            end
-            for _, part in pairs(plr.Character:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    local h = part:FindFirstChild("Highlight")
-                    if h then h:Destroy() end
+-- Função otimizada para ESP de raridade
+local function updateRarityESP()
+    for obj, _ in pairs(trackedRarities) do
+        if not obj.Parent then
+            trackedRarities[obj] = nil
+        end
+    end
+
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("TextLabel") and raritiesConfig[obj.Text] and raritiesConfig[obj.Text].enabled then
+            local model = obj:FindFirstAncestorOfClass("Model")
+            if model and not trackedRarities[model] then
+                local rootPart = model:FindFirstChild("HumanoidRootPart") or model:FindFirstChild("Head") or model.PrimaryPart
+                if rootPart then
+                    local billboard = Instance.new("BillboardGui")
+                    billboard.Name = "RarityESPLabel"
+                    billboard.Size = UDim2.new(0, 100, 0, 30)
+                    billboard.StudsOffset = Vector3.new(0, 3, 0)
+                    billboard.AlwaysOnTop = true
+                    billboard.Parent = rootPart
+                    
+                    local label = Instance.new("TextLabel")
+                    label.Size = UDim2.new(1, 0, 1, 0)
+                    label.TextSize = 20
+                    label.BackgroundTransparency = 1
+                    label.Text = obj.Text
+                    label.Font = Enum.Font.GothamBold
+                    label.TextColor3 = raritiesConfig[obj.Text].color
+                    label.Parent = billboard
+                    
+                    trackedRarities[model] = billboard
                 end
             end
         end
     end
 end
 
+-- Loop principal otimizado para ESP
 task.spawn(function()
     while espLoop do
-        if espEnabled then
-            for _, plr in pairs(Players:GetPlayers()) do
-                if plr ~= player then
-                    addESP(plr)
-                end
-            end
+        if playerESPEnabled then
+            updatePlayerESP()
         end
-        task.wait(1)
+        
+        if rarityESPEnabled and tick() % 2 < 0.1 then
+            updateRarityESP()
+        end
+        
+        task.wait(0.1)
     end
 end)
+
+-- Função para limpar ESPs
+local function clearESP()
+    for plr, data in pairs(trackedPlayers) do
+        data.highlight:Destroy()
+        data.billboard:Destroy()
+    end
+    trackedPlayers = {}
+    
+    for _, billboard in pairs(trackedRarities) do
+        billboard:Destroy()
+    end
+    trackedRarities = {}
+end
 
 -- SPEED HACK COM CONTROLE DE VELOCIDADE
 local speedConnection
@@ -205,7 +281,6 @@ local function toggleSpeed()
     speedEnabled = not speedEnabled
     
     if speedEnabled then
-        -- Iniciar o loop de velocidade
         speedConnection = RunService.Heartbeat:Connect(function()
             local char = player.Character
             if not char then return end
@@ -216,13 +291,11 @@ local function toggleSpeed()
             end
         end)
     else
-        -- Parar o loop de velocidade
         if speedConnection then
             speedConnection:Disconnect()
             speedConnection = nil
         end
         
-        -- Restaurar velocidade normal
         local char = player.Character
         if char then
             local humanoid = char:FindFirstChildOfClass("Humanoid")
@@ -233,6 +306,63 @@ local function toggleSpeed()
     end
 end
 
+-- SERVER HOP MOBILE (VERSÃO SIMPLIFICADA)
+local function serverHop()
+    if hopping then return end
+    hopping = true
+    
+    -- Notificação mobile
+    local notify = Instance.new("Frame", PlayerGui)
+    notify.Size = UDim2.new(0.8, 0, 0, 60)
+    notify.Position = UDim2.new(0.1, 0, 0.05, 0)
+    notify.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
+    notify.BackgroundTransparency = 0.2
+    
+    local corner = Instance.new("UICorner", notify)
+    corner.CornerRadius = UDim.new(0, 12)
+    
+    local stroke = Instance.new("UIStroke", notify)
+    stroke.Color = Color3.fromRGB(0, 200, 255)
+    stroke.Thickness = 2
+    
+    local label = Instance.new("TextLabel", notify)
+    label.Size = UDim2.new(1, -10, 1, -10)
+    label.Position = UDim2.new(0, 5, 0, 5)
+    label.Text = "🔍 Procurando servidor..."
+    label.Font = Enum.Font.GothamBold
+    label.TextColor3 = Color3.fromRGB(200, 230, 255)
+    label.BackgroundTransparency = 1
+    label.TextSize = 14
+    label.TextWrapped = true
+    
+    -- Animação de entrada
+    notify.Position = UDim2.new(0.1, 0, -0.1, 0)
+    TweenService:Create(notify, TweenInfo.new(0.3), {
+        Position = UDim2.new(0.1, 0, 0.05, 0)
+    }):Play()
+    
+    -- Método simplificado para mobile
+    local success, err = pcall(function()
+        TeleportService:Teleport(game.PlaceId) -- Teleporte aleatório padrão
+    end)
+    
+    if not success then
+        label.Text = "⚠️ Erro: " .. tostring(err)
+    end
+    
+    -- Remover após 3 segundos
+    delay(3, function()
+        TweenService:Create(notify, TweenInfo.new(0.3), {
+            BackgroundTransparency = 1,
+            Position = UDim2.new(0.1, 0, -0.1, 0)
+        }):Play()
+        wait(0.3)
+        notify:Destroy()
+    end)
+    
+    hopping = false
+end
+
 -- Criação da UI
 local gui = Instance.new("ScreenGui", PlayerGui)
 gui.Name = "Vixz Hub 👁️"
@@ -241,8 +371,8 @@ gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
 -- Frame principal
 local mainFrame = Instance.new("Frame", gui)
-mainFrame.Size = UDim2.new(0, 380, 0, 380)
-mainFrame.Position = UDim2.new(0.5, -190, 0.5, -190)
+mainFrame.Size = UDim2.new(0, 380, 0, 420)
+mainFrame.Position = UDim2.new(0.5, -190, 0.5, -210)
 mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
 mainFrame.BackgroundTransparency = 0.2
 mainFrame.BorderSizePixel = 0
@@ -261,7 +391,7 @@ glass.ZIndex = -1
 local glassCorner = Instance.new("UICorner", glass)
 glassCorner.CornerRadius = UDim.new(0, 12)
 
--- Barra de título com efeito gradiente
+-- Barra de título
 local titleBar = Instance.new("Frame", mainFrame)
 titleBar.Size = UDim2.new(1, 0, 0, 40)
 titleBar.BackgroundTransparency = 0.5
@@ -366,13 +496,15 @@ local visualFrame = createContentFrame("Visual")
 -- Conteúdo da aba Sobre
 local sobreText = [[
 ⚡ Vixz Hub ⚡
-Versão 1.0
+Versão 2.0
 
-Comandos:
-- Teleport: ▲/▼
-- Wall Climb: 🧱
-- Speed: ⚡
-- ESP: 👁️
+Recursos:
+- Player ESP (nome e distância)
+- Rarity ESP (filtro personalizável)
+- Controle de velocidade
+- Teleport vertical
+- Wall climb
+- Server Hop
 
 Desenvolvido por Vixz
 ]]
@@ -398,58 +530,6 @@ gridLayout.CellSize = UDim2.new(0.5, -5, 0, 50)
 gridLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 gridLayout.SortOrder = Enum.SortOrder.LayoutOrder
 
--- Função para criar botões estilizados
-local function createButton(text, callback, color)
-    local btn = Instance.new("TextButton")
-    btn.Text = text
-    btn.Font = Enum.Font.GothamBold
-    btn.TextSize = 16
-    btn.TextColor3 = Color3.new(1, 1, 1)
-    btn.BackgroundColor3 = color
-    btn.AutoButtonColor = false
-    btn.ZIndex = 2
-    
-    local btnCorner = Instance.new("UICorner", btn)
-    btnCorner.CornerRadius = UDim.new(0, 8)
-    
-    local stroke = Instance.new("UIStroke", btn)
-    stroke.Color = Color3.fromRGB(200, 200, 255)
-    stroke.Thickness = 1
-    
-    -- Animação de hover
-    btn.MouseEnter:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.2), {
-            BackgroundTransparency = 0,
-            Size = UDim2.new(0.52, 0, 0, 52)
-        }):Play()
-    end)
-    
-    btn.MouseLeave:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.2), {
-            BackgroundTransparency = 0.2,
-            Size = UDim2.new(0.5, 0, 0, 50)
-        }):Play()
-    end)
-    
-    -- Animação de clique
-    btn.MouseButton1Down:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.1), {
-            BackgroundTransparency = 0.4,
-            Size = UDim2.new(0.48, 0, 0, 48)
-        }):Play()
-    end)
-    
-    btn.MouseButton1Up:Connect(function()
-        TweenService:Create(btn, TweenInfo.new(0.1), {
-            BackgroundTransparency = 0.2,
-            Size = UDim2.new(0.5, 0, 0, 50)
-        }):Play()
-        callback()
-    end)
-    
-    return btn
-end
-
 -- Criar botões na aba Main
 local teleportBtn = createButton("▲/▼ TELEPORT", teleportUpDown, Color3.fromRGB(0, 120, 215))
 teleportBtn.Parent = buttonsFrame
@@ -458,6 +538,9 @@ local wallBtn = createButton("🧱 WALL CLIMB", function()
     wallBypass = not wallBypass
 end, Color3.fromRGB(50, 180, 80))
 wallBtn.Parent = buttonsFrame
+
+local serverHopBtn = createButton("🔄 SERVER HOP", serverHop, Color3.fromRGB(150, 50, 200))
+serverHopBtn.Parent = buttonsFrame
 
 -- Botão de velocidade com controle
 local speedBtn = createButton("⚡ SPEED: "..currentSpeed, toggleSpeed, Color3.fromRGB(215, 180, 0))
@@ -536,70 +619,110 @@ increaseBtn.MouseButton1Click:Connect(function()
 end)
 
 -- Conteúdo da aba Visual
-local espBtn = createButton("👁️ ESP", function() 
-    espEnabled = not espEnabled
-    if not espEnabled then clearESP() end
-end, Color3.fromRGB(215, 50, 50))
-espBtn.Size = UDim2.new(0.8, 0, 0, 50)
-espBtn.Position = UDim2.new(0.1, 0, 0.1, 0)
-espBtn.Parent = visualFrame
+local visualContent = Instance.new("Frame", visualFrame)
+visualContent.Size = UDim2.new(1, 0, 1, 0)
+visualContent.BackgroundTransparency = 1
 
--- Legenda de cores do ESP
-local espLegend = Instance.new("Frame", visualFrame)
-espLegend.Size = UDim2.new(0.8, 0, 0.6, 0)
-espLegend.Position = UDim2.new(0.1, 0, 0.3, 0)
-espLegend.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
-espLegend.BackgroundTransparency = 0.7
+local layout = Instance.new("UIListLayout", visualContent)
+layout.Padding = UDim.new(0, 10)
+layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
-local legendCorner = Instance.new("UICorner", espLegend)
-legendCorner.CornerRadius = UDim.new(0, 8)
+-- Botão principal do Player ESP
+local playerEspBtn = createButton("👁️ PLAYER ESP", function() 
+    playerESPEnabled = not playerESPEnabled
+    if not playerESPEnabled then 
+        for plr, data in pairs(trackedPlayers) do
+            data.highlight:Destroy()
+            data.billboard:Destroy()
+        end
+        trackedPlayers = {}
+    end
+end, Color3.fromRGB(50, 150, 255))
+playerEspBtn.Size = UDim2.new(0.9, 0, 0, 50)
+playerEspBtn.Parent = visualContent
 
-local legendTitle = Instance.new("TextLabel", espLegend)
-legendTitle.Size = UDim2.new(1, 0, 0.1, 0)
-legendTitle.Text = "Legenda de Raridade"
-legendTitle.Font = Enum.Font.GothamBold
-legendTitle.TextSize = 16
-legendTitle.TextColor3 = Color3.new(1, 1, 1)
-legendTitle.BackgroundTransparency = 1
+-- Botão principal do Rarity ESP
+local rarityEspBtn = createButton("🧠 RARITY ESP", function() 
+    rarityESPEnabled = not rarityESPEnabled
+    if not rarityESPEnabled then 
+        for _, billboard in pairs(trackedRarities) do
+            billboard:Destroy()
+        end
+        trackedRarities = {}
+    end
+end, Color3.fromRGB(180, 80, 220))
+rarityEspBtn.Size = UDim2.new(0.9, 0, 0, 50)
+rarityEspBtn.Parent = visualContent
 
--- Lista de raridades
-local rarities = {
-    {name = "Comum", color = Color3.new(1,1,1)},
-    {name = "Rare", color = Color3.new(0,1,0)},
-    {name = "Épico", color = Color3.new(0,0.5,1)},
-    {name = "Lendário", color = Color3.new(0.5,0,1)},
-    {name = "Mítico", color = Color3.new(1,0.8,0)}
-}
+-- Configurações de Raridades
+local raritySettingsFrame = Instance.new("Frame", visualContent)
+raritySettingsFrame.Size = UDim2.new(0.9, 0, 0, 180)
+raritySettingsFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+raritySettingsFrame.BackgroundTransparency = 0.7
+raritySettingsFrame.BorderSizePixel = 0
 
-local listLayout = Instance.new("UIListLayout", espLegend)
-listLayout.Padding = UDim.new(0, 5)
-listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-listLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-listLayout.Padding = UDim.new(0, 10)
+local rarityCorner = Instance.new("UICorner", raritySettingsFrame)
+rarityCorner.CornerRadius = UDim.new(0, 8)
 
-for i, rarity in ipairs(rarities) do
-    local item = Instance.new("Frame", espLegend)
-    item.Size = UDim2.new(0.9, 0, 0.15, 0)
-    item.BackgroundTransparency = 1
+local rarityTitle = Instance.new("TextLabel", raritySettingsFrame)
+rarityTitle.Size = UDim2.new(1, 0, 0, 30)
+rarityTitle.Text = "FILTRAR RARIDADES"
+rarityTitle.Font = Enum.Font.GothamBold
+rarityTitle.TextColor3 = Color3.new(1, 1, 1)
+rarityTitle.BackgroundTransparency = 1
+rarityTitle.TextSize = 14
+
+local rarityListLayout = Instance.new("UIListLayout", raritySettingsFrame)
+rarityListLayout.Padding = UDim.new(0, 5)
+
+-- Criar botões de seleção para cada raridade
+for rarityName, config in pairs(raritiesConfig) do
+    local rarityBtn = Instance.new("TextButton")
+    rarityBtn.Size = UDim2.new(0.9, 0, 0, 30)
+    rarityBtn.Position = UDim2.new(0.05, 0, 0, 0)
+    rarityBtn.Text = "  "..rarityName
+    rarityBtn.Font = Enum.Font.Gotham
+    rarityBtn.TextSize = 14
+    rarityBtn.TextXAlignment = Enum.TextXAlignment.Left
+    rarityBtn.BackgroundColor3 = config.color
+    rarityBtn.BackgroundTransparency = 0.7
+    rarityBtn.TextColor3 = Color3.new(1,1,1)
+    rarityBtn.AutoButtonColor = false
     
-    local colorBox = Instance.new("Frame", item)
-    colorBox.Size = UDim2.new(0, 20, 0.8, 0)
-    colorBox.Position = UDim2.new(0.05, 0, 0.1, 0)
-    colorBox.BackgroundColor3 = rarity.color
+    local btnCorner = Instance.new("UICorner", rarityBtn)
+    btnCorner.CornerRadius = UDim.new(0, 4)
     
-    local colorCorner = Instance.new("UICorner", colorBox)
-    colorCorner.CornerRadius = UDim.new(0, 4)
+    local toggleIndicator = Instance.new("Frame", rarityBtn)
+    toggleIndicator.Size = UDim2.new(0, 20, 0, 20)
+    toggleIndicator.Position = UDim2.new(1, -25, 0.5, -10)
+    toggleIndicator.BackgroundColor3 = config.enabled and Color3.new(0,1,0) or Color3.new(1,0,0)
+    toggleIndicator.BorderSizePixel = 0
     
-    local nameLabel = Instance.new("TextLabel", item)
-    nameLabel.Size = UDim2.new(0.7, 0, 1, 0)
-    nameLabel.Position = UDim2.new(0.3, 0, 0, 0)
-    nameLabel.Text = rarity.name
-    nameLabel.Font = Enum.Font.Gotham
-    nameLabel.TextSize = 14
-    nameLabel.TextColor3 = Color3.new(1, 1, 1)
-    nameLabel.BackgroundTransparency = 1
-    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+    local indicatorCorner = Instance.new("UICorner", toggleIndicator)
+    indicatorCorner.CornerRadius = UDim.new(1, 0)
+    
+    rarityBtn.MouseButton1Click:Connect(function()
+        raritiesConfig[rarityName].enabled = not raritiesConfig[rarityName].enabled
+        toggleIndicator.BackgroundColor3 = raritiesConfig[rarityName].enabled and Color3.new(0,1,0) or Color3.new(1,0,0)
+        
+        -- Limpar ESPs da raridade desativada
+        if not raritiesConfig[rarityName].enabled then
+            for model, billboard in pairs(trackedRarities) do
+                if billboard:FindFirstChildOfClass("TextLabel").Text == rarityName then
+                    billboard:Destroy()
+                    trackedRarities[model] = nil
+                end
+            end
+        end
+    end)
+    
+    rarityBtn.Parent = raritySettingsFrame
 end
+
+-- Ajustar posicionamento
+rarityTitle.Position = UDim2.new(0, 0, 0, 5)
+rarityListLayout.Padding = UDim.new(0, 8)
+rarityListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
 -- Barra de status
 local statusBar = Instance.new("Frame", mainFrame)
@@ -639,7 +762,7 @@ local function createStatusIndicator(name, color)
     label.Position = UDim2.new(0, 15, 0, 0)
     label.Text = name
     label.Font = Enum.Font.Gotham
-    label.TextSize = 12
+    label.TextSize = 20
     label.TextColor3 = Color3.new(1, 1, 1)
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.BackgroundTransparency = 1
@@ -651,17 +774,25 @@ end
 local speedStatus = createStatusIndicator("SPEED", Color3.fromRGB(255, 200, 50))
 speedStatus.Parent = statusBar
 
-local espStatus = createStatusIndicator("ESP", Color3.fromRGB(255, 50, 50))
-espStatus.Parent = statusBar
+local playerEspStatus = createStatusIndicator("P.ESP", Color3.fromRGB(50, 150, 255))
+playerEspStatus.Parent = statusBar
+
+local rarityEspStatus = createStatusIndicator("R.ESP", Color3.fromRGB(180, 80, 220))
+rarityEspStatus.Parent = statusBar
 
 local wallStatus = createStatusIndicator("WALL", Color3.fromRGB(100, 200, 100))
 wallStatus.Parent = statusBar
 
+local hopStatus = createStatusIndicator("HOP", Color3.fromRGB(200, 50, 150))
+hopStatus.Parent = statusBar
+
 -- Atualizar status
 local function updateStatus()
     speedStatus:FindFirstChildOfClass("Frame").BackgroundColor3 = speedEnabled and Color3.fromRGB(0, 255, 100) or Color3.fromRGB(255, 50, 50)
-    espStatus:FindFirstChildOfClass("Frame").BackgroundColor3 = espEnabled and Color3.fromRGB(0, 255, 100) or Color3.fromRGB(255, 50, 50)
+    playerEspStatus:FindFirstChildOfClass("Frame").BackgroundColor3 = playerESPEnabled and Color3.fromRGB(0, 255, 100) or Color3.fromRGB(255, 50, 50)
+    rarityEspStatus:FindFirstChildOfClass("Frame").BackgroundColor3 = rarityESPEnabled and Color3.fromRGB(0, 255, 100) or Color3.fromRGB(255, 50, 50)
     wallStatus:FindFirstChildOfClass("Frame").BackgroundColor3 = wallBypass and Color3.fromRGB(0, 255, 100) or Color3.fromRGB(255, 50, 50)
+    hopStatus:FindFirstChildOfClass("Frame").BackgroundColor3 = hopping and Color3.fromRGB(0, 255, 100) or Color3.fromRGB(255, 50, 50)
 end
 
 -- Atualizar periodicamente
@@ -789,7 +920,7 @@ task.spawn(function()
     label.Font = Enum.Font.GothamBold
     label.TextColor3 = Color3.fromRGB(200, 230, 255)
     label.BackgroundTransparency = 1
-    label.TextSize = 16
+    label.TextSize = 20
     
     TweenService:Create(notify, TweenInfo.new(0.5), {
         Position = UDim2.new(0.5, -150, 0, 30)
@@ -811,7 +942,4 @@ task.spawn(function()
 end)
 
 -- Inicializar status
-espEnabled = true
-wallBypass = false
-speedEnabled = false
 updateStatus()
